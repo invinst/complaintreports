@@ -15,14 +15,13 @@ complaints.csv : 1a.csv 1b.csv 1c.csv 1d.csv 1e.csv 1f.csv 1g.csv 1h.csv
 	csvstack $^ > $@
 
 
-2%.csv : 
-	unzip -p "Four Years of Complaint Data.zip" "*foia 14-5509 - report $(basename $@)*" > $(basename $@).xls
-	in2csv $(basename $@).xls | python scripts/accused.py > $@
-	rm $(basename $@).xls
+%.xls :
+	unzip -p "Four Years of Complaint Data.zip" "*foia 14-5509 - report $**" > $@
 
-1%.csv : 
-	unzip -p "Four Years of Complaint Data.zip" "*foia 14-5509 - report $(basename $@)*" > $(basename $@).xls
-	in2csv $(basename $@).xls | python scripts/complaint.py > $@
-	rm $(basename $@).xls
+2%.csv : 2%.xls
+	in2csv $< | python scripts/accused.py > $@
+
+1%.csv : 1%.xls
+	in2csv $< | python scripts/complaint.py > $@
 
 
