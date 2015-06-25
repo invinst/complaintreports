@@ -1,0 +1,244 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{url}
+\pgfrealjobname{modeling}
+\usepackage[nogin]{Sweave}
+\SweaveOpts{echo=F, width=4.5, height=4.75, prefix.string=/home/fgregg/sweave-cache/figs/fig, cache=T, results=hide}
+
+<<preamble, cache=FALSE>>=
+setCacheDir('/home/fgregg/sweave-cache/values')
+@ 
+
+\begin{document}
+
+\section{Cost of Impunity}
+The lack of police accountability costs our city in harm and
+death to our residents, high costs in settlements, and loss of trust
+between police and communities.
+
+This argument has a number of components
+
+\begin{enumerate}
+  \item The IPRA is not catching true cases of police misconduct.
+  \item When the IPRA does sustain misconduct, the consequences are meager
+  \item The Police could catch troubling patterns early
+  \item Harm and treasure could have been avoided if patterns caught early
+\end{enumerate}
+
+\subsection{IPRA Fails to Detect True Cases of Police Misconduct}
+From the CR data, we can see that a tiny fraction of complaints are
+sustained. However, it's hard to know if that is a problem. It's
+possible that most of the complaints are truly baseless or are
+impossible to prove. This is what the FOP says.
+
+What we want to know is how often the IPRA gets it right---how
+often do they sustain a true cases of police misconduct.
+
+We can get at that by looking at how IPRA ruled in cases where the
+city has settled a police involved law suit. If the IPRA does not
+sustain cases that the city ultimately settles, that's good evidence
+that the IPRA can't do it's job.
+
+\subsection{Consequences for Misconduct are Meaningless}
+Even when the IPRA sustains a complaint of police misconduct, the
+consequences are meaningless.
+
+I can't think of a better illustration of that than the two cases
+where the IPRA sustained complaints of rape/sexual violence and did
+not fire the officers.
+
+We can also go back to the settlement data, and show the IPRA
+consequences for officers involved in settlements.
+
+\subsection{The CPD Could Detect Troubling Officer Early}
+
+
+
+
+
+\section{Background}
+
+\section{Data Notes}
+In the file
+\url{CPD_Allegations_Complete_Database_-_May_28_2015.xlsx}, there is
+no easy way to know whether data came from the Moore, Bond, or
+Invisible Institute data releases. A \texttt{Source} column should be
+added.
+
+The Moore dataset is supposed to have record from 2002-2008, but there
+do not appear to be any records from 2007 or 2008. The records with
+record ids between 19445 and 26786 appear to be the Moore records but have
+dates between 2011 and 2015.
+
+
+
+
+
+<<load>>=
+
+allegations <- read.csv("Allegations.csv", stringsAsFactors=FALSE)
+
+allegations$IncidentDate <- as.Date(allegations$IncidentDate)
+allegations$StartDate <- as.Date(allegations$StartDate)
+allegations$EndDate <- as.Date(allegations$EndDate)
+
+# This is not the safest thing ever.
+allegations$source <- ifelse(allegations$RecordID <= 19448, 
+                             "Kalven", 
+                             ifelse(allegations$RecordID <= 26786, 
+                                    "Moore", 
+                                    "Bond"))
+
+allegations <- allegations[(allegations$source == 'Kalven' & 
+                            !is.na(allegations$source)),]
+
+findings <- c(DS="Discharged",
+              EX="Exonerated",
+              NC="No Cooperation",
+              NS="Not Sustained",
+              'No Affidavit'='No Affidavit',
+              SU="Sustained",
+              UN="Unfounded")
+
+allegations$FinalFinding[is.na(allegations$FinalFinding)] <- "No Affidavit"
+allegations$FinalFinding <- factor(findings[allegations$FinalFinding])
+
+allegations$Finding[allegations$Finding == ''] <- NA
+allegations$Finding <- factor(allegations$Finding)
+
+finding_types <- c(Exonerated='Innocent',
+                   Unfounded='Innocent',
+                   Sustained='Guilty',
+                   'No Affidavit'='Unknown',
+                   'Not Sustained'='Unknown'
+                   )
+
+allegations$positive_finding <- factor(finding_types[as.character(allegations$FinalFinding)])
+
+accused <- read.csv("accused.csv")
+accused$current_unit <- as.factor(accused$current_unit)
+accused$star <- as.factor(accused$star)
+accused$date_of_appointment <- as.Date(accused$date_of_appointment)
+
+complaint_count <- aggregate(complaint_id ~ (officer_name 
+                                             + date_of_appointment 
+                                             + star 
+                                             + current_unit), 
+                             data=accused, length)
+unit_average <- aggregate(complaint_id ~ current_unit, 
+                          data=complaint_count, mean)
+
+par(mfrow=c(3,3))
+for (unit in unit_average$current_unit[order(-unit_average$complaint_id)][2:10]) {
+    hist(complaint_count[complaint_count$current_unit==unit, 'complaint_id'],
+         main=paste("Unit ", 
+             unit, 
+             ", Average : ",
+             round(unit_average[unit_average$current_unit==unit, 'complaint_id'], 1),
+             sep=""),
+         ylab="Number of officers",
+         xlab="Complaints in past four years")
+    print(unit)
+}
+
+par(mfrow=c(1,1))
+hist(aggregate(complaint_id ~ officer_name + date_of_appointment + star, 
+               data=accused, length)[,4], breaks=40)
+
+
+@ 
+
+Data is censored. Does not show cops to had NO complaints
+
+Would be very good to add a source field. Have you done deduplicating?
+There don't seem to be any data from 2007 and 2008. 
+
+
+# What does `Discharged mean'?
+I think it means the officer was fired before it was all over
+
+# Because there are different sources. We need a source column!
+
+
+
+# Why are so many CRs with incident or start dates?
+
+# Why are there so many CRs without an officer, allegation, finding,
+out outcome, CRs 1043921-1004228
+
+
+
+
+# Main Argument
+
+CPD complaint system does little to hold officers accountable for
+misconduct. This allows a small number officers to commit serious
+crimes with impunity.
+
+## Sub-arguments
+1. Very few complaints are sustained
+http://www.chicagotribune.com/news/ct-chicago-police-citizen-complaints-met-20150613-story.html#page=3
+2. Of the sustained complaints, very few result in serious consequence
+http://www.chicagotribune.com/news/ct-chicago-police-citizen-complaints-met-20150613-story.html#page=3
+
+
+FOP's argument is that complaints are retalitory against officer doing
+their job as it should be done.
+
+- If that's true, there should be similar distribution of cops in same
+  role in same district.
+- Problem officers are somtimes observed. Looking at settlements and
+  criminal charges and can sometimes detect 'bad officers' can we find
+  good officers. Predict bad officers and good officers based upon records
+
+FOP's argument is that affidavit's filter out baseless claims. If that was
+true, then sustained rate should have gone up after the affidavit requirement. Did that happen?
+
+
+
+
+4. Most of the complaints are generated by a small number of officers.
+
+
+3. Criminal police officers have different types of complaint records than most officers.
+
+5. An accountable system could have prevented X crimes and saved Z dollars.
+
+
+- Some points *not* made in the trib article
+-- differential racial levels of reporting by district
+- do blacks and whites make different levels of reports in even 'safe' disctricts
+- diffential racial outcomes of sustained cases, controlling for affidavit
+- degree of difference in punishhment
+
+- charges of rape are SUSTAINED and don't turn into 
+
+
+The complaint system does not provide accountability
+
+Hierarchical model
+
+\# of complaint reports per officer per year
+
+y_{ijkt} = \pi_{0ijk} + \pi_{1jjk} \cdot t
+\pi_{0ijk} = \gamma_{0000} + \gamma_{0i00} + \gamma_{00j0} + \gamma_{000k}
+\gamma_{0i00} = \sigma_{0100} \cdot \text{Race}_i + \sigma_{0200} \text{Year of Academy grad}_i + u_i
+\gamma_{00j0} = \sigma_{0010} \cdot \text{Population of Young Black Men}_j + \sigma_{0020} \cdot \text{Population of Young Hispanic Men}_j + \sigma_{0030} \cdot \text{Population Young White Men}_j + \sigma_{0040} \cdot \text{Percent Poverty}_j + \sigma_{0060} \cdot \text{Size of Unit}_j + u_j
+\gamma_{000k} = \u_k
+
+
+y_{ijkt} is the number of complaints made against an officer i, of rank k,
+in unit j in year t
+
+i is officer
+j is unit
+k is rank
+
+If we wanted to treat sustained and unsustained complaints differently
+
+add cross classification to level 1
+
+y_{ijktl} = \pi_{0ijk} + \pi_{1jjk} \cdot t + \pi_{l}
+
+# Question
+How do you center a multinomial variable?
