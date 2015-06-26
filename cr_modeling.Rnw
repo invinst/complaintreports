@@ -75,6 +75,10 @@ dates between 2011 and 2015.
 
 
 <<load>>=
+THE SQL QUERY
+select year, officer_id, max(current_unit), max(current_rank), count(complaint_id) from (select extract(year from incident_date) as year, officer_id, current_unit, current_rank, complaint_id from accused inner join complaints using (complaint_id)) as complaints right outer join (select officer_id, year from officers cross join (select unnest(array[2010,2011,2012,2013,2014,2015]) as year) as years) as officer_years using (year, officer_id) group by officer_id, year order by officer_id, year;
+
+
 
 allegations <- read.csv("Allegations.csv", stringsAsFactors=FALSE)
 
