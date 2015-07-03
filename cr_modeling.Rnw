@@ -12,12 +12,95 @@ echo=F, fig.width=4.5, fig.height=4.75, fig.path='/home/fgregg/sweave-cache/figs
 )
 @
 
-<<load, include=FALSE, eval=FALSE>>=
+<<sankey>>=
+
 library(RPostgreSQL)
+con <- dbConnect(RPostgreSQL::PostgreSQL(), dbname="complaints")
+
+verbal_abuse <- c('01B')
+
+excessive_force <- c('05A', '05B', '05C', '05D', '05F',
+                     '05G', '05H', '05J', '05K', '05L',
+                     '05M', '05N', '05P', '05Q')
+
+first_amendment <- c('03A', '03B', '03C', '03D', '03E', '03F', '03G')
+search <- c('04A', '04B', '04C', '04D', '04E', '04F', '04G', '04H', '04J')
+
+external_complaints_non_ipra <- c(first_amendment, search)
+
+
+ipra_complaints <- c(verbal_abuse, excessive_force)
+
+resolved_complaints <- dbGetQuery(con,
+    paste("select count(*), recommended_finding from accused, complaints where accused.complaint_id = complaints.complaint_id and investigator in (select name from ipra_employees) and recommended_finding != '' and complaint in ('",
+          paste(ipra_complaints, collapse="', '"),
+          "') group by recommended_finding order by count(*) desc", sep=''))  
+
+counts <- resolved_complaints$count
+if (length(counts) < 5) {
+    counts <- c(counts, 0)
+}
+
+SankeyR(sum(counts), 
+        counts,
+        labels=c("Complaints", "No affidavit", "Not sustained", "Unfounded", "Exonerated", "Sustained"), 
+        unit="")
+
+all_complaints <- dbGetQuery(con, 'select recommended_finding, complaint from accused')
+@ 
+
+complaints_by_ipra <- dbGetQuery(con, "select complaint, ipra from accused inner join (select complaint_id, investigator, case when investigator = 'KLIMAS, ROBERT' then 'IAD' when name is null then 'CPD' when name is not null then 'IPRA' end as ipra from complaints left join ipra_employees on complaints.investigator = ipra_employees.name) as investigators using (complaint_id)")
+                                 
+
+Only a small fraction of the IAD investigations show up in accused file.
+
+Why are so many investigation not have an allegation code?
+
+09A would seem to be a domestic violence report but only 4\% of them are investigated by IPRA, even though it says that all will be investigated by IPRA
+
+John Stahl, a police sargeant, seemed to have investigated a case where there was an allegation of verbal abuse with bias, complaint id: 1063852 This is the only case where this type of allegation was not investigated by an IPRA investigator.
+
+Philip Paluch, a police sargeant, investigated an excessive force complaint 1048571. Elizabeth Ramirez investigated an excessive force complaint 1045498 
+
+Mark Higgs investigated an excessive force complaint 1052098
+
+When do commanding officers versus IPRA staff investigate verbal abuse that is not 1B?
+
+Some b
+
+hernandez neomi
+pamela cureton
+william walsh
+
+
+With the current data, we can show three facts about the police
+misconduct. 
+
+\begin{enumerate}
+\item Few complaints are sustained 
+\item The penalties for sustained complaints are meager
+\item Officers who draw many complaints are unusual in the force and
+  within their unit
+\end{enumerate}
+
+\noindent With additional data or investigation, we could show that
+
+\begin{enumerate}
+  \item IPRA is failing to sustain true complaints
+  \item The department could identify criminal police officers by
+    looking at their complaint history
+\end{enumerate}
+
+\subsection*{Few complaints are sustained}
+Current police complaint procedures result in only X percent of complaints
+being sustained. Y percent are dismissed because the complainant is
+not willing to sign an affidavit. In Z percent of the cases, the
+investigators are unable to find sufficient evidence. 
+    
+<<load, include=FALSE, eval=FALSE>>=
 library(lme4)
 library(xtable)
 
-con <- dbConnect(RPostgreSQL::PostgreSQL(), dbname="complaints")
 
 yearly_complaints <- dbGetQuery(con,
     "SELECT year, officer_id, count(complaint_id) AS complaints, \
@@ -26,44 +109,21 @@ yearly_complaints <- dbGetQuery(con,
      FROM \
      (SELECT EXTRACT(YEAR FROM incident_date) AS year, \
              officer_id, \
-             complaint_id, \
-             current_unit, \
-             current_rank \
+             complaint_id \
       FROM accused INNER JOIN complaints \
       USING (complaint_id) \
       ) AS complaints \
      RIGHT OUTER JOIN \
-     (SELECT officer_id, race, gender, year \ 
+     (SELECT * \ 
       FROM officers CROSS JOIN \
       (SELECT UNNEST(ARRAY[2012,2013,2014]) AS year) AS years \
       ) AS officer_years \
      USING (year, officer_id) \
      GROUP BY officer_id, year")
 
-old_officer = -1
-old_rank = -1
-old_unit = -1
-for (i in c(1:dim(yearly_complaints)[1], dim(yearly_complaints)[1]:1)) {
-    officer = yearly_complaints[i, 'officer_id']
-    rank = yearly_complaints[i, 'rank']
-    unit = yearly_complaints[i, 'unit']
-    if (officer != old_officer) {
-        old_officer = officer
-        old_rank = NA
-        old_unit = NA
-    }
-    if (is.na(rank)) {
-        yearly_complaints[i, 'rank'] = old_rank
-        yearly_complaints[i, 'unit'] = old_unit
-    } else {
-        old_rank = yearly_complaints[i, 'rank']
-        old_unit = yearly_complaints[i, 'unit']
-    }
-}
-
 yearly_complaints <- na.omit(yearly_complaints)
 
-model <- lme4::glmer(complaints ~ (I(year-2013)
+model <- lme4::glmer(complaints ~ (I(year-2013) + 
                                    + (1 + I(year-2013) | rank)
                                    + (1 + I(year-2013) | unit)
                                    + (1 + I(year-2013) | officer_id)
@@ -150,16 +210,16 @@ officer.\footnote{The model is mixed effects Poisson regression model:
   
 \begin{align*}
 &\log{\operatorname{E}(y_{ijkt})} = \pi_{0ijk} + \pi_{1ijk} \cdot \text{Year}_t \\
-&\pi_{0ijk} = \gamma_{0000} + \gamma_{0i00} + \gamma_{00j0} +
-  \gamma_{000k} \\
-&\pi_{0ijk} = \gamma_{1000} + \gamma_{1i00} + \gamma_{10j0} +
-  \gamma_{100k} \\
-&\gamma_{0i00} = u_{0i} \\
-&\gamma_{00j0} = u_{0j} \\
-&\gamma_{000k} = u_{0k} \\
-&\gamma_{0i00} = u_{1i} \\
-&\gamma_{00j0} = u_{1j} \\
-&\gamma_{000k} = u_{1k}
+&\pi_{0ijk} = \beta_{0000} + \beta_{0i00} + \beta_{00j0} +
+  \beta_{000k} \\
+&\pi_{1ijk} = \beta_{1000} + \beta_{1i00} + \beta_{10j0} +
+  \beta_{100k} \\
+&\beta_{0i00} = b_{0i} \\
+&\beta_{00j0} = c_{0j} \\
+&\beta_{000k} = d_{0k} \\
+&\beta_{1i00} = b_{1i} \\
+&\beta_{10j0} = c_{1j} \\
+&\beta_{100k} = d_{1k}
 \end{align*}
 
 Where $y_{ijkt}$ is the number of complaints made against officer $i$,
@@ -171,6 +231,7 @@ officer by. This model controls for the unit and the rank of the officer.
 }
 
 <<top_officers, results='asis'>>=
+
 officers <- ranef(model)$officer_id
 
 top_officer_ids <- row.names(officers)[order(-officers[,1])][1:10]
@@ -183,8 +244,8 @@ top_officers <- dbGetQuery(con,
                                  sep=''))
 
 top_officers$date_of_appointment <- as.character(top_officers$date_of_appointment)
-tab <- xtable::xtable(top_officers[,1:5])
-names(tab) <- c("Officer", "Star", "Date of Appointment", "Race", "Gender")
+tab <- xtable::xtable(top_officers[,c(1:4, 6:7)])
+names(tab) <- c("Officer", "Star", "Date of Appointment", "Race", "Rank", "Unit")
 
 print(tab, row.names=FALSE, include.rownames=FALSE)
 @ 
@@ -203,7 +264,8 @@ record ids between 19445 and 26786 appear to be the Moore records but have
 dates between 2011 and 2015.
 
 Data is censored. Does not show cops to had no complaints. What can we
-do about that?
+do about that? Relatedly, can we get data on the assignment and ranks
+of officers at the time of the complaint report incidents?
 
 FOP's argument is that affidavit's filter out baseless claims. If that
 was true, then sustained rate should have gone up after the affidavit
