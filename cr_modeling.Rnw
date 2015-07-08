@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage{amsmath}
 \usepackage{url}
+\usepackage{enumitem}
 
 \begin{document}
 
@@ -10,26 +11,13 @@ library(knitr)
 opts_chunk$set(
 echo=F, fig.width=4.5, fig.height=4.75, fig.path='/home/fgregg/sweave-cache/figs/fig', cache=T, results='hide'
 )
+knit_hooks$set(inline = function(x) {
+  prettyNum(x, big.mark=",")
+})
 @
 
-<<sankey>>=
+<<sankey, eval=FALSE>>=
 
-library(RPostgreSQL)
-con <- dbConnect(RPostgreSQL::PostgreSQL(), dbname="complaints")
-
-verbal_abuse <- c('01B')
-
-excessive_force <- c('05A', '05B', '05C', '05D', '05F',
-                     '05G', '05H', '05J', '05K', '05L',
-                     '05M', '05N', '05P', '05Q')
-
-first_amendment <- c('03A', '03B', '03C', '03D', '03E', '03F', '03G')
-search <- c('04A', '04B', '04C', '04D', '04E', '04F', '04G', '04H', '04J')
-
-external_complaints_non_ipra <- c(first_amendment, search)
-
-
-ipra_complaints <- c(verbal_abuse, excessive_force)
 
 resolved_complaints <- dbGetQuery(con,
     paste("select count(*), recommended_finding from accused, complaints where accused.complaint_id = complaints.complaint_id and investigator in (select name from ipra_employees) and recommended_finding != '' and complaint in ('",
@@ -47,49 +35,182 @@ SankeyR(sum(counts),
         unit="")
 
 all_complaints <- dbGetQuery(con, 'select recommended_finding, complaint from accused')
-@ 
 
 complaints_by_ipra <- dbGetQuery(con, "select complaint, ipra from accused inner join (select complaint_id, investigator, case when investigator = 'KLIMAS, ROBERT' then 'IAD' when name is null then 'CPD' when name is not null then 'IPRA' end as ipra from complaints left join ipra_employees on complaints.investigator = ipra_employees.name) as investigators using (complaint_id)")
-                                 
-
-Only a small fraction of the IAD investigations show up in accused file.
-
-Why are so many investigation not have an allegation code?
-
-09A would seem to be a domestic violence report but only 4\% of them are investigated by IPRA, even though it says that all will be investigated by IPRA
-
-John Stahl, a police sargeant, seemed to have investigated a case where there was an allegation of verbal abuse with bias, complaint id: 1063852 This is the only case where this type of allegation was not investigated by an IPRA investigator.
-
-Philip Paluch, a police sargeant, investigated an excessive force complaint 1048571. Elizabeth Ramirez investigated an excessive force complaint 1045498 
-
-Mark Higgs investigated an excessive force complaint 1052098
-
-When do commanding officers versus IPRA staff investigate verbal abuse that is not 1B?
-
-Some b
-
-hernandez neomi
-pamela cureton
-william walsh
 
 
-With the current data, we can show three facts about the police
-misconduct. 
+@ 
 
-\begin{enumerate}
-\item Few complaints are sustained 
-\item The penalties for sustained complaints are meager
+With the current data, we can show some facts about police misconduct
+and it's investigation. If we take complaints as an imperfect
+indicator of police misconduct, we can observe that:
+
+\begin{enumerate}[noitemsep]
 \item Officers who draw many complaints are unusual in the force and
   within their unit
+\item Officers with many complaints are connected to one another
 \end{enumerate}
 
-\noindent With additional data or investigation, we could show that
+\noindent By looking at how complaints get processed, we can see that in the 
+investigation process:
 
-\begin{enumerate}
-  \item IPRA is failing to sustain true complaints
-  \item The department could identify criminal police officers by
-    looking at their complaint history
+\begin{enumerate}[noitemsep]
+\item Few complaints are sustained 
+\item The penalties for sustained complaints are meager
+\item If police officers are the investigators, complainants are much
+  less willing to sign affidavits than if investigated by IPRA staff.
 \end{enumerate}
+
+I'll first discuss the patterns we can establish with current data,
+and then will be possible with additional data.
+
+\section*{Currently Demonstrable Patterns}
+\subsection*{Police Misconduct}
+\subsubsection*{Multiple Complaints Are Rare}
+Most officers will have a complaint made against them. A very small
+number of officers get more than 5 a year.
+
+<<yearly_complaints>>=
+
+library(RPostgreSQL)
+con <- dbConnect(RPostgreSQL::PostgreSQL(), dbname="complaints")
+
+verbal_abuse <- c('01B')
+excessive_force <- c('05A', '05B', '05C', '05D', '05F',
+                     '05G', '05H', '05J', '05K', '05L',
+                     '05M', '05N', '05P', '05Q')
+ipra_complaints <- c(verbal_abuse, excessive_force)
+
+first_amendment <- c('03A', '03B', '03C', '03D', '03E', '03F', '03G')
+search <- c('04A', '04B', '04C', '04D', '04E', '04F', '04G', '04H', '04J')
+
+external_complaints_non_ipra <- c(first_amendment, search)
+
+external_complaints <- c(external_complaints_non_ipra, ipra_complaints)
+
+yearly_complaints <- dbGetQuery(con,
+                                paste(
+    "SELECT year, officer_id, count(complaint_id) AS complaints, \
+            max(current_unit) as unit, max(current_rank) as rank, \
+            max(gender) as gender, max(race) as race
+     FROM \
+     (SELECT EXTRACT(YEAR FROM incident_date::TIMESTAMP) AS year, \
+             officer_id, \
+             complaint_id \
+      FROM accused INNER JOIN complaints \
+      USING (complaint_id) \
+      WHERE complaint IN ('",
+     paste(external_complaints, collapse="', '"),
+     "') \                               
+      ) AS complaints \
+     RIGHT OUTER JOIN \
+     (SELECT * \ 
+      FROM officers CROSS JOIN \
+      (SELECT UNNEST(ARRAY[2012,2013,2014]) AS year) AS years \
+      ) AS officer_years \
+     USING (year, officer_id) \
+     GROUP BY officer_id, year"))
+yearly_complaints <- na.omit(yearly_complaints)
+
+po_complaints <- yearly_complaints[yearly_complaints$year == 2014 
+                                   & yearly_complaints$rank == 'PO', 
+                                   "complaints"]
+
+sarge_complaints <- yearly_complaints[yearly_complaints$year == 2014 
+                                      & yearly_complaints$rank == 'SGT', 
+                                      "complaints"]
+
+yearly <- dbGetQuery(con,
+    'SELECT count(*) AS count, position_title, assignment \
+     FROM "2014_staffing" \
+     GROUP BY position_title, assignment \
+     ORDER BY count(*)')
+
+po_officers <- yearly[yearly$position_title == 'POLICE OFFICER' 
+                      & yearly$assignment == '', 'count']
+sarges <- yearly[yearly$position_title == 'SERGEANT', 'count'] 
+
+po_complaints <- c(po_complaints, 
+                   rep(0, po_officers - length(po_complaints)))
+
+sarge_complaints <- c(sarge_complaints, 
+                      rep(0, sarges - length(sarge_complaints)))
+
+@ 
+
+In 2014, there were about \Sexpr{signif(length(po_complaints), 2)}
+police officers and \Sexpr{signif(length(sarge_complaints), 2)}
+sergeants.\footnote{Source: Excludes police officers with assignments
+  like detective, field training officer, evidence technican.} Of the
+police officers, about \Sexpr{signif(sum(po_complaints == 0), 2)} had
+no complaints made against them, and \Sexpr{signif(sum(po_complaints
+  == 1), 2)} had only one. Only \Sexpr{signif(sum(po_complaints >= 4),
+  2)} police officer had four or more complaints made against them
+(Figure \ref{2014-po-fig}). Multiple complaints are similarly rare for
+sergeants (Figure \ref{2014-sarge-fig}).\footnote{We are only
+  including complaints where that include an allegation of verbal
+  abuse with bias, excessive force, first amendment violations, and
+  improper searches. We are assuming that officers had the same rank
+  in 2014 as their rank as of May 2015.}
+
+
+\begin{figure}
+<<>>=
+barplot(table(po_complaints), main="2014 Complaints, Police Officers", xlab="Number of complaints", ylab="Police Officers")
+@ 
+\caption{2014 Complaints Against Police Officers}
+\label{2014-po-fig}
+\end{figure}
+
+\begin{figure}
+<<>>=
+barplot(table(sarge_complaints), main="2014 Complaints, Sergeants", xlab="Number of complaints", ylab="Sergeants")
+@ 
+\caption{2014 Complaints Against Sergeants}
+\label{2014-sarge-fig}
+\end{figure}
+
+<<allcomplaints>>=
+all_po <- dbGetQuery(con,
+                     paste(
+    "SELECT count(distinct complaint_id) AS count \
+     FROM (SELECT * FROM accused WHERE complaint IN ('",
+     paste(external_complaints, collapse="', '"),
+     "')) AS external_complaints \                         
+     INNER JOIN officers \
+     USING (officer_id) \
+     WHERE current_rank = 'PO' \
+     GROUP BY officer_id \
+     ORDER BY count(*)"))[,1]
+
+@ 
+
+Between September 2011 to May 2015, \Sexpr{length(all_po)} police
+officers had at least one complaint that included an
+allegation of verbal abuse with bias, excessive force, first amendment
+violations or illegal searches. Of these officers 
+
+<<>>=
+barplot(table(all_po))
+@ 
+
+
+
+When we look at all the officers who had a complaint made against them
+in from , 
+
+
+
+<<>>=
+@ 
+
+\noindent These facts are not definitive evidence that officers who
+draw many complaints are doing wrong or that the investigations and
+rulings are unjust. To demonstrate that, with data, we will need to
+collect additional data.
+
+
+
 
 \subsection*{Few complaints are sustained}
 Current police complaint procedures result in only X percent of complaints
@@ -102,26 +223,6 @@ library(lme4)
 library(xtable)
 
 
-yearly_complaints <- dbGetQuery(con,
-    "SELECT year, officer_id, count(complaint_id) AS complaints, \
-            max(current_unit) as unit, max(current_rank) as rank, \
-            max(gender) as gender, max(race) as race
-     FROM \
-     (SELECT EXTRACT(YEAR FROM incident_date) AS year, \
-             officer_id, \
-             complaint_id \
-      FROM accused INNER JOIN complaints \
-      USING (complaint_id) \
-      ) AS complaints \
-     RIGHT OUTER JOIN \
-     (SELECT * \ 
-      FROM officers CROSS JOIN \
-      (SELECT UNNEST(ARRAY[2012,2013,2014]) AS year) AS years \
-      ) AS officer_years \
-     USING (year, officer_id) \
-     GROUP BY officer_id, year")
-
-yearly_complaints <- na.omit(yearly_complaints)
 
 model <- lme4::glmer(complaints ~ (I(year-2013) + 
                                    + (1 + I(year-2013) | rank)
@@ -141,6 +242,10 @@ top_officers_complaints <- dbGetQuery(con,
                                  paste(top_officer_ids, collapse=','),
                                  ") order by officer_id, complaint_id",
                                  sep=''))
+
+
+                              
+
 @ 
 
 \section*{Cost of Impunity}
@@ -276,3 +381,31 @@ requirement. Did that happen?
 
 
 \end{document}
+
+Only a small fraction of the IAD investigations show up in accused file.
+
+ Why are so many investigation not have an allegation code?
+
+09A would seem to be a domestic violence report but only 4\% of them are investigated by IPRA, even though it says that all will be investigated by IPRA
+
+John Stahl, a police sargeant, seemed to have investigated a case where there was an allegation of verbal abuse with bias, complaint id: 1063852 This is the only case where this type of allegation was not investigated by an IPRA investigator.
+
+Philip Paluch, a police sargeant, investigated an excessive force complaint 1048571. Elizabeth Ramirez investigated an excessive force complaint 1045498 
+
+Mark Higgs investigated an excessive force complaint 1052098
+
+When do commanding officers versus IPRA staff investigate verbal abuse that is not 1B?
+
+Some b
+
+hernandez neomi
+pamela cureton
+william walsh
+
+
+\begin{enumerate}
+  \item IPRA is failing to sustain true complaints
+  \item The department could identify criminal police officers by
+    looking at their complaint history
+\end{enumerate}
+
