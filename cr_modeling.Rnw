@@ -67,11 +67,7 @@ and then will be possible with additional data.
 \section*{Currently Demonstrable Patterns}
 \subsection*{Police Misconduct}
 \subsubsection*{Multiple Complaints Are Rare}
-Most officers will have a complaint made against them. A very small
-number of officers get more than 5 a year.
-
-<<yearly_complaints>>=
-
+<<allcomplaints>>=
 library(RPostgreSQL)
 con <- dbConnect(RPostgreSQL::PostgreSQL(), dbname="complaints")
 
@@ -88,89 +84,6 @@ external_complaints_non_ipra <- c(first_amendment, search)
 
 external_complaints <- c(external_complaints_non_ipra, ipra_complaints)
 
-yearly_complaints <- dbGetQuery(con,
-                                paste(
-    "SELECT year, officer_id, count(complaint_id) AS complaints, \
-            max(current_unit) as unit, max(current_rank) as rank, \
-            max(gender) as gender, max(race) as race
-     FROM \
-     (SELECT EXTRACT(YEAR FROM incident_date::TIMESTAMP) AS year, \
-             officer_id, \
-             complaint_id \
-      FROM accused INNER JOIN complaints \
-      USING (complaint_id) \
-      WHERE complaint IN ('",
-     paste(external_complaints, collapse="', '"),
-     "') \                               
-      ) AS complaints \
-     RIGHT OUTER JOIN \
-     (SELECT * \ 
-      FROM officers CROSS JOIN \
-      (SELECT UNNEST(ARRAY[2012,2013,2014]) AS year) AS years \
-      ) AS officer_years \
-     USING (year, officer_id) \
-     GROUP BY officer_id, year"))
-yearly_complaints <- na.omit(yearly_complaints)
-
-po_complaints <- yearly_complaints[yearly_complaints$year == 2014 
-                                   & yearly_complaints$rank == 'PO', 
-                                   "complaints"]
-
-sarge_complaints <- yearly_complaints[yearly_complaints$year == 2014 
-                                      & yearly_complaints$rank == 'SGT', 
-                                      "complaints"]
-
-yearly <- dbGetQuery(con,
-    'SELECT count(*) AS count, position_title, assignment \
-     FROM "2014_staffing" \
-     GROUP BY position_title, assignment \
-     ORDER BY count(*)')
-
-po_officers <- yearly[yearly$position_title == 'POLICE OFFICER' 
-                      & yearly$assignment == '', 'count']
-sarges <- yearly[yearly$position_title == 'SERGEANT', 'count'] 
-
-po_complaints <- c(po_complaints, 
-                   rep(0, po_officers - length(po_complaints)))
-
-sarge_complaints <- c(sarge_complaints, 
-                      rep(0, sarges - length(sarge_complaints)))
-
-@ 
-
-In 2014, there were about \Sexpr{signif(length(po_complaints), 2)}
-police officers and \Sexpr{signif(length(sarge_complaints), 2)}
-sergeants.\footnote{Source: Excludes police officers with assignments
-  like detective, field training officer, evidence technican.} Of the
-police officers, about \Sexpr{signif(sum(po_complaints == 0), 2)} had
-no complaints made against them, and \Sexpr{signif(sum(po_complaints
-  == 1), 2)} had only one. Only \Sexpr{signif(sum(po_complaints >= 4),
-  2)} police officer had four or more complaints made against them
-(Figure \ref{2014-po-fig}). Multiple complaints are similarly rare for
-sergeants (Figure \ref{2014-sarge-fig}).\footnote{We are only
-  including complaints where that include an allegation of verbal
-  abuse with bias, excessive force, first amendment violations, and
-  improper searches. We are assuming that officers had the same rank
-  in 2014 as their rank as of May 2015.}
-
-
-\begin{figure}
-<<>>=
-barplot(table(po_complaints), main="2014 Complaints, Police Officers", xlab="Number of complaints", ylab="Police Officers")
-@ 
-\caption{2014 Complaints Against Police Officers}
-\label{2014-po-fig}
-\end{figure}
-
-\begin{figure}
-<<>>=
-barplot(table(sarge_complaints), main="2014 Complaints, Sergeants", xlab="Number of complaints", ylab="Sergeants")
-@ 
-\caption{2014 Complaints Against Sergeants}
-\label{2014-sarge-fig}
-\end{figure}
-
-<<allcomplaints>>=
 all_po <- dbGetQuery(con,
                      paste(
     "SELECT count(distinct complaint_id) AS count \
@@ -182,7 +95,6 @@ all_po <- dbGetQuery(con,
      WHERE current_rank = 'PO' \
      GROUP BY officer_id \
      ORDER BY count(*)"))[,1]
-
 @ 
 
 Between September 2011 to May 2015, \Sexpr{length(all_po)} police
@@ -221,6 +133,30 @@ investigators are unable to find sufficient evidence.
 <<load, include=FALSE, eval=FALSE>>=
 library(lme4)
 library(xtable)
+
+yearly_complaints <- dbGetQuery(con,
+                                paste(
+    "SELECT year, officer_id, count(complaint_id) AS complaints, \
+            max(current_unit) as unit, max(current_rank) as rank, \
+            max(gender) as gender, max(race) as race
+     FROM \
+     (SELECT EXTRACT(YEAR FROM incident_date::TIMESTAMP) AS year, \
+             officer_id, \
+             complaint_id \
+      FROM accused INNER JOIN complaints \
+      USING (complaint_id) \
+      WHERE complaint IN ('",
+     paste(external_complaints, collapse="', '"),
+     "') \                               
+      ) AS complaints \
+     RIGHT OUTER JOIN \
+     (SELECT * \ 
+      FROM officers CROSS JOIN \
+      (SELECT UNNEST(ARRAY[2012,2013,2014]) AS year) AS years \
+      ) AS officer_years \
+     USING (year, officer_id) \
+     GROUP BY officer_id, year"))
+yearly_complaints <- na.omit(yearly_complaints)
 
 
 
