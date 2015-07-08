@@ -85,7 +85,7 @@ department had around \Sexpr{9300} police officers on payroll.
 Of the officers with a complaint, \Sexpr{sum(all_po == 1)} police
 officers had only one and 90\% of officers had four our fewer
 complaints.  Only \Sexpr{sum(all_po >= 15)} officers had fifteen or
-more complaints. That's about 1 in 1000. (Figure~\ref{po-complaints-fig})
+more complaints. That's about 1 in 1000. (Figure~\ref{po-complaint-fig})
 
 \begin{figure}
 <<>>=
@@ -98,6 +98,15 @@ barplot(table(all_po),
 \caption{Complaints against Police Officers from 2011 to 2015}
 \end{figure}
 
+
+Multiple complaints are not just rare overall, they are rare in every
+police unit. While average number of complaints does vary
+substantially, in every unit there are a few officers who gather many
+more complaints than the rest of their units. We can see this pattern
+by looking at the six units with the highest average number of
+complaints per officer in Figure~\ref{complaints-unit-fig}.
+
+\begin{figure}
 <<byunits>>=
 units <- dbGetQuery(con, 
     paste(
@@ -111,7 +120,7 @@ units <- dbGetQuery(con,
         AND current_rank = 'PO' \
       GROUP BY officer_id, current_unit) AS officer_count \
      GROUP BY current_unit \
-     HAVING COUNT(*) > 5
+     HAVING COUNT(*) > 10
      ORDER BY AVG(count) DESC"))
 
 officer_units <- dbGetQuery(con, 
@@ -138,34 +147,27 @@ for (i in 1:6) {
     unit = units[i, 'current_unit']
     avg = units[i, 'avg']
     n = units[i, 'n']
-    hist(officer_units[officer_units$current_unit == unit, 'count'],
-         main = unit_names[as.character(unit)],
+    barplot(table(officer_units[officer_units$current_unit == unit, 'count']),
+         main = paste(unit_names[as.character(unit)],
+                      '\nAverage: ',
+                      signif(avg,2),
+                      sep=''),
          xlab="Number of complaints",
          ylab="Police Officers")
 }    
-
+par(mfrow=c(1,1))
 @ 
+\label{complaints-unit-fig}
+\caption{Complaints by unit}
+\end{figure}
 
+Officers who receive multiple complaints are not just having an
+unlucky year. If many complaints are made against an officer in one
+year, then its likely that many complaints will be against that
+officer in the next year (Figure~\ref{complaints-year-fig}).
 
-
-Multiple complaints are not just rare overall, they are rare in every
-police unit.
-
-
-<<>>=
-@ 
-
-
-\subsection*{Few complaints are sustained}
-Current police complaint procedures result in only X percent of complaints
-being sustained. Y percent are dismissed because the complainant is
-not willing to sign an affidavit. In Z percent of the cases, the
-investigators are unable to find sufficient evidence. 
-    
-<<load, include=FALSE, eval=FALSE>>=
-library(lme4)
-library(xtable)
-
+\begin{figure}
+<<complaintsbyyear>>=
 yearly_complaints <- dbGetQuery(con,
                                 paste(
     "SELECT year, officer_id, count(complaint_id) AS complaints, \
@@ -185,10 +187,70 @@ yearly_complaints <- dbGetQuery(con,
      (SELECT * \ 
       FROM officers CROSS JOIN \
       (SELECT UNNEST(ARRAY[2012,2013,2014]) AS year) AS years \
+      WHERE current_rank='PO' \
       ) AS officer_years \
      USING (year, officer_id) \
      GROUP BY officer_id, year"))
 yearly_complaints <- na.omit(yearly_complaints)
+
+yearly_complaints <- data.frame('2012'=yearly_complaints[yearly_complaints$year == '2012', 
+                                  'complaints'], 
+                                '2013'=yearly_complaints[yearly_complaints$year=='2013', 
+                                           'complaints'],
+                                '2014'=yearly_complaints[yearly_complaints$year=='2014', 
+                                    'complaints'])
+
+yearly_complaints <- yearly_complaints[rowSums(yearly_complaints) > 0,]
+
+over_time <- data.frame(previous_year = c(yearly_complaints$X2012,
+                                          yearly_complaints$X2013),
+                        next_year = c(yearly_complaints$X2013,
+                                      yearly_complaints$X2014))
+
+x.bin <- 0:max(over_time$previous_year)
+y.bin <- 0:max(over_time$next_year)
+
+freq <-  as.data.frame(table(findInterval(over_time$previous_year, x.bin),
+                             findInterval(over_time$next_year, y.bin)))
+
+freq[,1] <- as.numeric(freq[,1])
+freq[,2] <- as.numeric(freq[,2])
+
+freq2D <- mat.or.vec(length(x.bin), length(y.bin))
+freq2D[cbind(freq[,1], freq[,2])] <- freq[,3]
+
+# Normal
+image(x.bin, y.bin, freq2D^(1/3), col=grey.colors(200, start=1, end=0),
+      main="Complaints Across Years", xlab="Complaints in Previous Year", ylab="Complaints in Next Year")
+@ 
+\caption{Complaints By Year}
+\label{complaints-year-fig}
+\end{figure}
+
+\paragraph{Recommended visualization}. 
+
+\begin{figure}
+  \centering
+<<fig.width=1.8, fig.height=5>>=
+image(as.matrix(t(tail(yearly_complaints[order(rowSums(yearly_complaints)),], 20))), 
+       col=grey.colors(200, start=1, end=0),
+       axes=FALSE)
+axis(2, at = 0:19/19, labels=paste('Officer', 20:1), tick=FALSE, las=1, cex.axis=0.7)
+axis(3, at = c(0, 0.5, 1), labels=c('2012', '2014', '2015'), tick=FALSE, las=2)
+@ 
+\caption{Complaints By Year}
+\end{figure}
+
+\subsection*{Few complaints are sustained}
+Current police complaint procedures result in only X percent of complaints
+being sustained. Y percent are dismissed because the complainant is
+not willing to sign an affidavit. In Z percent of the cases, the
+investigators are unable to find sufficient evidence. 
+    
+<<load, include=FALSE, eval=FALSE>>=
+library(lme4)
+library(xtable)
+
 
 
 
