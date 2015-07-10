@@ -2,6 +2,7 @@
 \usepackage{amsmath}
 \usepackage{url}
 \usepackage{enumitem}
+\usepackage{lipsum}
 
 \begin{document}
 
@@ -227,10 +228,23 @@ image(x.bin, y.bin, freq2D^(1/3), col=grey.colors(200, start=1, end=0),
 \label{complaints-year-fig}
 \end{figure}
 
-\paragraph{Recommended visualization}. 
+\paragraph{Recommended visualization: Sorted Heatmap} I recommend you
+show two heatmaps of the number of complaints by officer by year. The
+first should be very narrow and long to demonstrate that the vast bulk
+of officers have very few complaints, while a few have many and many
+every year. The second heatmap should be a zoomed in view, that shows
+the details for officers. On the web, these two visualizations should
+be coupled so that detail view is aligned to slider of the macro view (Figure \ref{recommended-viz-fig}).
 
 \begin{figure}
-  \centering
+  \begin{minipage}{0.40\textwidth}
+<<fig.width=1.3, fig.height=5>>=
+image(as.matrix(t(tail(yearly_complaints[order(rowSums(yearly_complaints)),], 500))), 
+       col=grey.colors(200, start=1, end=0),
+       axes=FALSE)
+@ 
+  \end{minipage}\hfill
+  \begin{minipage}{0.40\textwidth}
 <<fig.width=1.8, fig.height=5>>=
 image(as.matrix(t(tail(yearly_complaints[order(rowSums(yearly_complaints)),], 20))), 
        col=grey.colors(200, start=1, end=0),
@@ -238,8 +252,63 @@ image(as.matrix(t(tail(yearly_complaints[order(rowSums(yearly_complaints)),], 20
 axis(2, at = 0:19/19, labels=paste('Officer', 20:1), tick=FALSE, las=1, cex.axis=0.7)
 axis(3, at = c(0, 0.5, 1), labels=c('2012', '2014', '2015'), tick=FALSE, las=2)
 @ 
-\caption{Complaints By Year}
+\end{minipage}
+\label{recommended-viz-fig}
+\caption{Complaints By Year, Top 20 and All}
 \end{figure}
+
+
+<<>>=
+library(igraph)
+
+focal <- c(5513, 3658, 3963, 7181)
+
+relations <- data.frame(from=character(), to=character(), count=integer())
+
+for (ego in focal) {
+    relations <- rbind(relations,
+                       dbGetQuery(con, 
+                                  paste("SELECT", ego, 
+                                        "AS from, officer_id AS to, \
+                                         COUNT(distinct complaint_id) as count \
+                                         FROM accused \
+                                         WHERE complaint_id \
+                                           IN (SELECT complaint_id \
+                                               FROM accused \
+                                               WHERE officer_id = ", ego, ") \
+                                           AND officer_id != ", ego, " \
+                                           GROUP BY officer_id")))
+}
+
+g <- graph.data.frame(relations, directed=FALSE)
+g <- simplify(g, remove.multiple = TRUE)
+
+num_complaints <- dbGetQuery(con,
+                             paste(
+                             "SELECT officer_id, count(distinct complaint_id) \
+                              FROM accused WHERE officer_id IN (",
+                                 paste(unique(relations$to), collapse=", "),
+                                 ") GROUP BY officer_id"))
+
+num_complaints <- setNames(num_complaints[,2], 
+                           as.character(num_complaints[,1]))
+
+g <- delete.vertices(g, 
+                     which(attr(V(g), 'names') 
+                           %in% 
+                           names(num_complaints)[num_complaints <= 10]))
+
+
+
+num_complaints <- num_complaints[attr(V(g), 'names')]
+            
+                          
+
+    
+plot(g,layout=layout.fruchterman.reingold(g,weights=E(g)), vertex.size=num_complaints)
+
+
+@ 
 
 \subsection*{Few complaints are sustained}
 Current police complaint procedures result in only X percent of complaints
