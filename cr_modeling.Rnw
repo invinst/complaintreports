@@ -261,35 +261,14 @@ axis(3, at = c(0, 0.5, 1), labels=c('2012', '2014', '2015'), tick=FALSE, las=2)
 <<>>=
 library(igraph)
 
-focal <- c(5513, 3658, 3963, 7181, 964, 4729, 7219, 5692, 6925, 4766)
-
-relations <- data.frame(from=character(), to=character(), count=integer())
-
-for (ego in focal) {
-    relations <- rbind(relations,
-                       dbGetQuery(con, 
-                                  paste("SELECT", ego, 
-                                        "AS from, officer_id AS to, \
-                                         COUNT(distinct complaint_id) as count \
-                                         FROM accused \
-                                         WHERE complaint_id \
-                                           IN (SELECT complaint_id \
-                                               FROM accused \
-                                               WHERE officer_id = ", ego, ") \
-                                         AND officer_id != ", ego, " \
-                                         GROUP BY officer_id
-                                         HAVING COUNT(*) > 1")))
-}
+relations <- dbGetQuery(con,
+                "select a.officer_id, b.officer_id, count(distinct complaint_id) from accused as a inner join accused as b using (complaint_id) where a.officer_id < b.officer_id group by a.officer_id, b.officer_id having count(distinct complaint_id) > 2")
 
 g <- graph.data.frame(relations, directed=FALSE)
-g <- simplify(g, remove.multiple = TRUE)
 
 num_complaints <- dbGetQuery(con,
-                             paste(
                              "SELECT officer_id, count(distinct complaint_id) \
-                              FROM accused WHERE officer_id IN (",
-                                 paste(unique(relations$to), collapse=", "),
-                                 ") GROUP BY officer_id"))
+                              FROM accused GROUP BY officer_id")
 
 num_complaints <- setNames(num_complaints[,2], 
                            as.character(num_complaints[,1]))
@@ -297,17 +276,15 @@ num_complaints <- setNames(num_complaints[,2],
 g <- delete.vertices(g, 
                      which(attr(V(g), 'names') 
                            %in% 
-                           names(num_complaints)[num_complaints <= 10]))
+                           names(num_complaints)[num_complaints <= 5]))
 
 
 
 num_complaints <- num_complaints[attr(V(g), 'names')]
             
-                          
 
-    
-plot(g,layout=layout.fruchterman.reingold(g,weights=E(g)), vertex.size=num_complaints)
 
+plot(g, vertex.size=num_complaints/5, vertex.label='', layout=layout.fruchterman.reingold(g,weights=E(g)))
 
 @ 
 
