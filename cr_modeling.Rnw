@@ -24,7 +24,6 @@ indicator of police misconduct, we can observe that:
 \begin{enumerate}[noitemsep]
 \item Officers who draw many complaints are unusual in the force and
   within their unit
-\item Officers with many complaints are connected to one another
 \end{enumerate}
 
 \noindent By looking at how complaints get processed, we can see that in the 
@@ -257,42 +256,212 @@ axis(3, at = c(0, 0.5, 1), labels=c('2012', '2014', '2015'), tick=FALSE, las=2)
 \caption{Complaints By Year, Top 20 and All}
 \end{figure}
 
+<<dispositions>>=
+all_investigators <- dbGetQuery(con,
+    paste("SELECT COUNT(*) as count, recommended_finding \
+           FROM accused INNER JOIN complaints \
+           USING (complaint_id) \
+           WHERE recommended_finding != '' \
+              AND complaint IN ('", paste(external_complaints, 
+                                          collapse = "', '"), "') \
+           GROUP BY recommended_finding \
+           ORDER BY COUNT(*) desc", sep=''))
 
-<<>>=
-library(igraph)
-
-relations <- dbGetQuery(con,
-                "select a.officer_id, b.officer_id, count(distinct complaint_id) from accused as a inner join accused as b using (complaint_id) where a.officer_id < b.officer_id group by a.officer_id, b.officer_id having count(distinct complaint_id) > 2")
-
-g <- graph.data.frame(relations, directed=FALSE)
-
-num_complaints <- dbGetQuery(con,
-                             "SELECT officer_id, count(distinct complaint_id) \
-                              FROM accused GROUP BY officer_id")
-
-num_complaints <- setNames(num_complaints[,2], 
-                           as.character(num_complaints[,1]))
-
-g <- delete.vertices(g, 
-                     which(attr(V(g), 'names') 
-                           %in% 
-                           names(num_complaints)[num_complaints <= 5]))
-
-
-
-num_complaints <- num_complaints[attr(V(g), 'names')]
-            
-
-
-plot(g, vertex.size=num_complaints/5, vertex.label='', layout=layout.fruchterman.reingold(g,weights=E(g)))
-
+disposition_percent <- all_investigators$count/sum(all_investigators$count) * 100
+names(disposition_percent) <- all_investigators$recommended_finding 
 @ 
 
 \subsection*{Few complaints are sustained}
-Current police complaint procedures result in only X percent of complaints
-being sustained. Y percent are dismissed because the complainant is
-not willing to sign an affidavit. In Z percent of the cases, the
-investigators are unable to find sufficient evidence. 
+Only \Sexpr{signif(disposition_percent['SU'], 2)}\% of police
+complaints are sustained. Most
+(\Sexpr{signif(disposition_percent['NA'], 2)}\%) cases are never
+investigated because the complainant will not sign an affidavit
+swearing to the truth of the complaint. For
+\Sexpr{signif(disposition_percent['NS'], 2)}\% of complaints, investigators fail to find evidence to either sustain the complaint
+or show the officer blameless, resulting in a `Not Sustained'
+disposition. In the remaining \Sexpr{signif(disposition_percent['UN'] +
+  disposition_percent['EX'], 2)}\% of cases, the complaint is found to be
+unfounded or the officer's actions are found to be justified (Figure~\ref{sankey-all-fig}). 
+
+\paragraph{Recommended visualization: Sankey Diagram} I recommend you
+show the different dispositions as a Sankey diagram. For added interest,
+the user could select complaint category or investigator type to see
+how the pattern changes.
+
+\begin{figure}
+  \centering
+<<all_sankey, fig.height=3>>=
+source('Sankey.R')
+
+dispositionSankey <- function(df) {
+    counts <- df$count
+    if (length(counts) < 5) {
+        counts <- c(counts, 0)
+    }
+
+    SankeyR(sum(counts), 
+            counts,
+            labels=c("Complaints", "No affidavit", "Not sustained", "Unfounded", "Exonerated", "Sustained"), 
+            unit="")
+    }
+
+dispositionSankey(all_investigators)
+@ 
+\label{sankey-all-fig}
+\caption{Disposition of Complaints}
+\end{figure}
+
+\subsection*{Dispositions vary depend on who's investigating}
+
+The outcome of a complaint depends upon who is investigating the
+case. If the case is investigated by an IPRA employee, the complainant
+is likely to sign an affidavit, and the complaint has a much higher
+chance of being sustained (Figure~\ref{sankey-ipra-fig}). On the other
+hand, if the case is being investigated by a commanding officer, few
+complainants are willing to sign affidavits and the very few
+complaints are sustained
+(Figure~\ref{sankey-commanding-fig}). Complaints investigated by
+Internal Affairs are in between (Figure~\ref{sankey-iad-fig}).
+
+\paragraph{Recommended visualization: Bar graph} I recommend you show
+the rates of `No Affidavit' and `Sustained' in a simple bar chart.
+
+\begin{figure}
+  \centering
+<<ipra_sankey, fig.height=3>>=
+ipra_investigators <- dbGetQuery(con,
+    paste("SELECT COUNT(*) as count, recommended_finding \
+           FROM accused INNER JOIN complaints \
+           USING (complaint_id) \
+           WHERE investigator IN (SELECT name FROM ipra_employees) \
+               AND recommended_finding != '' \
+               AND complaint IN ('", paste(external_complaints, 
+                                           collapse = "', '"), "') \
+           GROUP BY recommended_finding \
+           ORDER BY COUNT(*) desc", sep=''))  
+
+dispositionSankey(ipra_investigators)
+@ 
+\label{sankey-ipra-fig}
+\caption{Disposition of Complaints Investigated by IPRA}
+\end{figure}
+
+\begin{figure}
+  \centering
+<<iad_sankey, fig.height=3>>= 
+iad_investigators = c(
+    'KLIMAS, ROBERT',
+    'KANE, JAMIE', 
+    'ANDREWS-SMITH, MARSHA', 
+    'JORDAN, TYRONE', 
+    'MORSE, CARLIN', 
+    'HERMANN, JANINE',
+    'DOWNS, RICHARD', # http://projects.suntimes.com/koschman/wp-content/uploads/2013/08/Internal-Affairs-Report-March-7-2013.pdf
+    'PIONKE, JOSEPH', # http://projects.suntimes.com/koschman/wp-content/uploads/2013/08/Internal-Affairs-Report-March-7-2013.pdf
+    'MARTINEZ, LINDA', 
+    'STEHLIK, JOSEPH', # http://articles.chicagotribune.com/2012-10-31/news/ct-met-abbate-bar-beating-trial-1031-20121031_1_felony-karolina-obrycka-misdemeanor-charges
+    'SOLIS, MARCELLA', # http://www.cityofchicago.org/content/dam/city/depts/cpb/PoliceDiscipline/14PB2863.pdf
+    'ALEJO, LUIS', 
+    'RICE, SEAN', # http://projects.suntimes.com/koschman/latest-news/after-10-years-cpd-wants-to-talk-to-mom/
+    'MARAFFINO, JOSEPH',  #http://chicagofop.org/newsletter/2013/042013news.pdf
+    'COCHRAN, TERRANCE', # https://casetext.com/case/krupa-v-naleway
+    'NALEWAY, DAVID', # https://casetext.com/case/krupa-v-naleway
+    'ASSAF, MAJED', # https://www.linkedin.com/pub/majed-assaf-mba-cfe/35/54/376
+    'MARTINEZ, LINDA', # http://www.cityofchicago.org/content/dam/city/depts/cpb/PoliceDiscipline/14PB2852.pdf
+    'BARZ, MICHAEL', # http://www.cityofchicago.org/content/dam/city/depts/cpb/PoliceDiscipline/14PB2855.pdf
+    'GIUDICE, THOMAS', # http://secondcitycop.blogspot.com/2006/03/new-sergeant-assignments.html,
+    'SPAGNOLA, MICHAEL', # http://secondcitycop.blogspot.com/2006/03/new-sergeant-assignments.html,
+    'PLOTKE, RICHARD', # http://articles.chicagotribune.com/2011-08-25/news/ct-met-eavesdropping-trial-0825-20110825_1_eavesdropping-law-police-officers-law-enforcement
+    'MATTHEWS, ROMAN', # http://chicagofop.org/newsletter/2012/062012news.pdf
+    'WHITE, EVELYN', # http://chicagofop.org/newsletter/2012/062012news.pdf
+    'WOODS, DAVID')
+
+police_agents <- dbGetQuery(con,
+    paste("SELECT COUNT(*) as count, recommended_finding \
+           FROM accused INNER JOIN complaints \
+           USING (complaint_id) \
+           WHERE (investigator IN (SELECT name \
+                                  FROM police_employees \
+                                  WHERE position = 'POLICE AGENT') \
+               OR investigator IN (SELECT officer_name \
+                                   FROM officers \
+                                   WHERE current_unit = '121') \
+               OR investigator IN ('", 
+          paste(iad_investigators, collapse = "', '"), "')) \
+               AND recommended_finding != '' \
+               AND complaint IN ('", paste(external_complaints, 
+                                           collapse = "', '"), "') \
+           GROUP BY recommended_finding \
+           ORDER BY COUNT(*) desc", sep=''))  
+
+dispositionSankey(police_agents)
+@ 
+\label{sankey-iad-fig}
+\caption{Disposition of Complaints Investigated by IAD}
+\end{figure}
+
+\begin{figure}
+\centering
+<<commanding_officers_sankey, fig.height=3>>=
+commanding_officers <- dbGetQuery(con,
+    paste("SELECT COUNT(*) as count, recommended_finding \
+           FROM accused INNER JOIN complaints \
+           USING (complaint_id) \
+           WHERE (investigator NOT IN (SELECT name \
+                                  FROM police_employees \
+                                  WHERE position = 'POLICE AGENT') \
+               AND investigator NOT IN (SELECT officer_name \
+                                   FROM officers \
+                                   WHERE current_unit = '121') \
+               AND investigator NOT IN (SELECT name FROM ipra_employees) \
+               AND investigator NOT IN ('", 
+          paste(iad_investigators, collapse = "', '"), "')) \
+               AND recommended_finding != '' \
+               AND complaint IN ('", paste(external_complaints, 
+                                           collapse = "', '"), "') \
+           GROUP BY recommended_finding \
+           ORDER BY COUNT(*) desc", sep=''))  
+
+dispositionSankey(commanding_officers)
+@ 
+\label{sankey-commanding-fig}
+\caption{Disposition of Complaints Investigated by Commanding Officers}
+\end{figure}
+
+<<punishments>>=
+excessive_force <- dbGetQuery(con,
+                              "SELECT final_discipline \
+                               FROM accused \
+                               WHERE complaint LIKE '05%' \
+                               AND recommended_finding = 'SU'")
+
+
+suspension <- ifelse((substr(excessive_force$final_discipline, 1, 1) == 0
+                      & excessive_force$final_discipline != '000'),
+                     TRUE,
+                     FALSE)
+
+suspension_lookup = c(
+    '000'=0, 
+    '100'=0, 
+    '200'=Inf, 
+    '300'=Inf, 
+    '600'=0, 
+    '800'=Inf, 
+    '900'=0)
+
+suspension_length <- ifelse((substr(excessive_force$final_discipline, 1, 1) < '2'
+                             & !(excessive_force$final_discipline 
+                                 %in% c('000', '100'))),
+                            as.numeric(as.character(excessive_force$final_discipline)),
+                             suspension_lookup[as.character(excessive_force$final_discipline)])
+
+
+less_than_five <- sum(suspension_length <= 5)/length(suspension_length)
+@ 
+
+\subsection*{Punishments are meager}
+
     
 <<load, include=FALSE, eval=FALSE>>=
 library(lme4)
@@ -486,29 +655,12 @@ william walsh
     looking at their complaint history
 \end{enumerate}
 
-<<sankey, eval=FALSE>>=
-
-
-resolved_complaints <- dbGetQuery(con,
-    paste("select count(*), recommended_finding from accused, complaints where accused.complaint_id = complaints.complaint_id and investigator in (select name from ipra_employees) and recommended_finding != '' and complaint in ('",
-          paste(ipra_complaints, collapse="', '"),
-          "') group by recommended_finding order by count(*) desc", sep=''))  
-
-counts <- resolved_complaints$count
-if (length(counts) < 5) {
-    counts <- c(counts, 0)
-}
-
-SankeyR(sum(counts), 
-        counts,
-        labels=c("Complaints", "No affidavit", "Not sustained", "Unfounded", "Exonerated", "Sustained"), 
-        unit="")
-
-all_complaints <- dbGetQuery(con, 'select recommended_finding, complaint from accused')
-
-complaints_by_ipra <- dbGetQuery(con, "select complaint, ipra from accused inner join (select complaint_id, investigator, case when investigator = 'KLIMAS, ROBERT' then 'IAD' when name is null then 'CPD' when name is not null then 'IPRA' end as ipra from complaints left join ipra_employees on complaints.investigator = ipra_employees.name) as investigators using (complaint_id)")
-
-
-@ 
 
 Todo: scrape http://www.chicagopolice.org/2013MayDirectives/data/a7a57be2-129add9f-15f12-9add-9fea37e07625ed82.html?ownapi=1
+
+complaints_by_ipra <- dbGetQuery(con, paste("select complaint, ipra from accused inner join (select complaint_id, investigator, case when (investigator in ('", paste(iad_investigators, collapse = "', '"), "') OR investigator in (SELECT officer_name from officers where current_unit = '121') OR investigator IN (SELECT name FROM police_employees WHERE position = 'POLICE AGENT')) then 'IAD' when name is null then 'CPD' when name is not null then 'IPRA' end as ipra from complaints left join ipra_employees on complaints.investigator = ipra_employees.name) as investigators using (complaint_id)", sep=''))
+
+complaints <- dbGetQuery(con, paste("select investigator from complaints where investigator not in ('", paste(iad_investigators, collapse = "', '"), "') AND investigator not in (SELECT officer_name FROM officers) AND investigator NOT IN (SELECT name FROM police_employees WHERE position = 'POLICE AGENT') AND investigator not in (SELECT name from ipra_employees)", sep=''))
+
+
+
