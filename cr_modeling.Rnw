@@ -448,16 +448,15 @@ suspension_lookup = c(
     '300'=Inf, 
     '600'=0, 
     '800'=Inf, 
-    '900'=0)
+    '900'=Inf)
 
-suspension_length <- ifelse((substr(excessive_force$final_discipline, 1, 1) < '2'
-                             & !(excessive_force$final_discipline 
-                                 %in% c('000', '100'))),
+suspension_length <- ifelse(substr(excessive_force$final_discipline, 1, 1) == '0',
                             as.numeric(as.character(excessive_force$final_discipline)),
-                             suspension_lookup[as.character(excessive_force$final_discipline)])
+                            suspension_lookup[as.character(excessive_force$final_discipline)])
 
 
 less_than_five <- sum(suspension_length <= 5)/length(suspension_length)
+
 @ 
 
 \subsection*{Punishments are meager}
