@@ -14,6 +14,9 @@
 
 <<include=FALSE>>=
 library(knitr)
+library(RPostgreSQL)
+library(xtable)
+library(lme4)
 opts_chunk$set(
 echo=F, fig.width=4.5, fig.height=4.75, fig.path='/home/fgregg/sweave-cache/figs/fig', cache=T, results='hide'
 )
@@ -48,7 +51,6 @@ discuss some potential problems in this data.
 \subsection*{Police Misconduct}
 \subsubsection*{Multiple Complaints Are Rare}
 <<allcomplaints, hide=TRUE>>=
-library(RPostgreSQL)
 con <- dbConnect(RPostgreSQL::PostgreSQL(), dbname="complaints")
 
 verbal_abuse <- c('01B')
@@ -299,7 +301,7 @@ how the pattern changes.
 \begin{figure}
   \centering
 <<all_sankey, fig.height=3>>=
-source('Sankey.R')
+source('../R/Sankey.R')
 
 dispositionSankey <- function(df) {
     counts <- df$count
@@ -519,8 +521,6 @@ investigate them. If Invisible Institute finds criminal behavior, that
 would be very strong evidence indeed. 
 
 <<load, include=FALSE, eval=FALSE>>=
-library(lme4)
-
 yearly_complaints_for_analysis$unit <- as.factor(yearly_complaints_for_analysis$unit)
 yearly_complaints_for_analysis$officer_id<- as.factor(yearly_complaints_for_analysis$officer_id)
 
@@ -546,8 +546,6 @@ These are the top ten outlying police officers controlling for unit.\footnote{Th
 }
 
 <<top_officers, results='asis'>>=
-library(xtable)
-
 officers <- ranef(model)$officer_id
 
 top_officer_ids <- row.names(officers)[order(-officers[,1])][1:10]

@@ -1,0 +1,11 @@
+Package: complaintreports
+Title: Analysis of Chicago Police Department Complaint Reports
+Version: 0.0.0.1
+Authors@R: person("Forest", "Gregg", email = "fgregg@gmail.com", role = c("aut", "cre"))
+Description: Analysis of Chicago Police Department Complaint Reports
+Depends: R (>= 3.2.1),
+    knitr,
+    RPostgreSQL,
+    lmer,
+    xtable
+License: MIT 

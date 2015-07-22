@@ -7,12 +7,14 @@ Requirements
 
 To build the database
 ```
+cd data
 make
 ```
 
-[This is a knitr report](http://yihui.name/knitr/)
+To build the reports
 
-
-Current IPRA employees fetched from data portal on July 2, 2015
-
+```bash
+cd analysis
+make
+```
 
