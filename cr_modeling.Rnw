@@ -3,8 +3,13 @@
 \usepackage{url}
 \usepackage{enumitem}
 \usepackage{lipsum}
+\title{Report on Visualization and Analysis Opportunities in Recent
+  Complaint Report Data}
+\author{Forest Gregg, DataMade}
+
 
 \begin{document}
+\maketitle
 
 
 <<include=FALSE>>=
@@ -16,9 +21,8 @@ knit_hooks$set(inline = function(x) {
   prettyNum(x, big.mark=",")
 })
 @
-
 With the current data, we can show some facts about police misconduct
-and it's investigation. If we take complaints as an imperfect
+and its investigation. If we take complaints as an imperfect
 indicator of police misconduct, we can observe that:
 
 \begin{enumerate}[noitemsep]
@@ -31,18 +35,19 @@ investigation process:
 
 \begin{enumerate}[noitemsep]
 \item Few complaints are sustained 
-\item The penalties for sustained complaints are meager
 \item If police officers are the investigators, complainants are much
   less willing to sign affidavits than if investigated by IPRA staff.
+\item The penalties for sustained complaints are meager
 \end{enumerate}
 
 I'll first discuss the patterns we can establish with current data,
-and then will be possible with additional data.
+and then what may be possible with additional data. Finally, I'll
+discuss some potential problems in this data.
 
 \section*{Currently Demonstrable Patterns}
 \subsection*{Police Misconduct}
 \subsubsection*{Multiple Complaints Are Rare}
-<<allcomplaints>>=
+<<allcomplaints, hide=TRUE>>=
 library(RPostgreSQL)
 con <- dbConnect(RPostgreSQL::PostgreSQL(), dbname="complaints")
 
@@ -94,14 +99,14 @@ barplot(table(all_po),
         xlab='Number of complaints',
         ylab='Police Officers')
 @ 
-\label{po-complaint-fig}
 \caption{Complaints against Police Officers from 2011 to 2015}
+\label{po-complaint-fig}
 \end{figure}
 
 
 Multiple complaints are not just rare overall, they are rare in every
 police unit. While average number of complaints does vary
-substantially, in every unit there are a few officers who gather many
+substantially, in every unit there are always a few officers who gather many
 more complaints than the rest of their units. We can see this pattern
 by looking at the six units with the highest average number of
 complaints per officer in Figure~\ref{complaints-unit-fig}.
@@ -157,8 +162,8 @@ for (i in 1:6) {
 }    
 par(mfrow=c(1,1))
 @ 
-\label{complaints-unit-fig}
 \caption{Complaints by unit}
+\label{complaints-unit-fig}
 \end{figure}
 
 Officers who receive multiple complaints are not just having an
@@ -192,6 +197,7 @@ yearly_complaints <- dbGetQuery(con,
      USING (year, officer_id) \
      GROUP BY officer_id, year"))
 yearly_complaints <- na.omit(yearly_complaints)
+yearly_complaints_for_analysis <- yearly_complaints
 
 yearly_complaints <- data.frame('2012'=yearly_complaints[yearly_complaints$year == '2012', 
                                   'complaints'], 
@@ -233,7 +239,9 @@ first should be very narrow and long to demonstrate that the vast bulk
 of officers have very few complaints, while a few have many and many
 every year. The second heatmap should be a zoomed in view, that shows
 the details for officers. On the web, these two visualizations should
-be coupled so that detail view is aligned to slider of the macro view (Figure \ref{recommended-viz-fig}).
+be coupled so that detail view is aligned to slider of the macro view
+(Figure \ref{recommended-viz-fig}). You may also want to break out the
+views by unit.
 
 \begin{figure}
   \begin{minipage}{0.40\textwidth}
@@ -252,8 +260,8 @@ axis(2, at = 0:19/19, labels=paste('Officer', 20:1), tick=FALSE, las=1, cex.axis
 axis(3, at = c(0, 0.5, 1), labels=c('2012', '2014', '2015'), tick=FALSE, las=2)
 @ 
 \end{minipage}
-\label{recommended-viz-fig}
 \caption{Complaints By Year, Top 20 and All}
+\label{recommended-viz-fig}
 \end{figure}
 
 <<dispositions>>=
@@ -307,8 +315,8 @@ dispositionSankey <- function(df) {
 
 dispositionSankey(all_investigators)
 @ 
-\label{sankey-all-fig}
 \caption{Disposition of Complaints}
+\label{sankey-all-fig}
 \end{figure}
 
 \subsection*{Dispositions vary depend on who's investigating}
@@ -342,8 +350,8 @@ ipra_investigators <- dbGetQuery(con,
 
 dispositionSankey(ipra_investigators)
 @ 
-\label{sankey-ipra-fig}
 \caption{Disposition of Complaints Investigated by IPRA}
+\label{sankey-ipra-fig}
 \end{figure}
 
 \begin{figure}
@@ -396,8 +404,8 @@ police_agents <- dbGetQuery(con,
 
 dispositionSankey(police_agents)
 @ 
-\label{sankey-iad-fig}
 \caption{Disposition of Complaints Investigated by IAD}
+\label{sankey-iad-fig}
 \end{figure}
 
 \begin{figure}
@@ -424,24 +432,13 @@ commanding_officers <- dbGetQuery(con,
 
 dispositionSankey(commanding_officers)
 @ 
-\label{sankey-commanding-fig}
 \caption{Disposition of Complaints Investigated by Commanding Officers}
+\label{sankey-commanding-fig}
 \end{figure}
 
 <<punishments>>=
-excessive_force <- dbGetQuery(con,
-                              "SELECT final_discipline \
-                               FROM accused \
-                               WHERE complaint LIKE '05%' \
-                               AND recommended_finding = 'SU'")
-
-
-suspension <- ifelse((substr(excessive_force$final_discipline, 1, 1) == 0
-                      & excessive_force$final_discipline != '000'),
-                     TRUE,
-                     FALSE)
-
-suspension_lookup = c(
+lessThanFive <- function(df) {
+    suspension_lookup = c(
     '000'=0, 
     '100'=0, 
     '200'=Inf, 
@@ -449,217 +446,179 @@ suspension_lookup = c(
     '600'=0, 
     '800'=Inf, 
     '900'=Inf)
+    
+    discipline <- df[,1]
+    
+    suspension_length <- ifelse(substr(discipline, 1, 1) == '0',
+                                as.numeric(as.character(discipline)),
+                                suspension_lookup[as.character(discipline)])
+    
+    return(sum(na.omit(suspension_length <= 5))/length(suspension_length))
+}
 
-suspension_length <- ifelse(substr(excessive_force$final_discipline, 1, 1) == '0',
-                            as.numeric(as.character(excessive_force$final_discipline)),
-                            suspension_lookup[as.character(excessive_force$final_discipline)])
-
-
-less_than_five <- sum(suspension_length <= 5)/length(suspension_length)
-
+excessive_force_lt5 <- lessThanFive(dbGetQuery(con,
+                              "SELECT final_discipline \
+                               FROM accused \
+                               WHERE complaint LIKE '05%' \
+                               AND recommended_finding = 'SU'"))
+illegal_search_lt5 <- lessThanFive(dbGetQuery(con,
+                              "SELECT final_discipline \
+                               FROM accused \
+                               WHERE complaint LIKE '04%' \
+                               AND recommended_finding = 'SU'"))
+first_amendment_lt5 <- lessThanFive(dbGetQuery(con,
+                              "SELECT final_discipline \
+                               FROM accused \
+                               WHERE complaint LIKE '03%' \
+                               AND recommended_finding = 'SU'"))
 @ 
 
 \subsection*{Punishments are meager}
+In the rare event that a complaint is sustained, most punishments are
+meager. For sustained excessive force complaints,
+\Sexpr{signif(excessive_force_lt5 * 100, 2)}\% resulted in a
+suspension for five days or less; the figures are
+\Sexpr{signif(illegal_search_lt5 * 100, 2)}\% for illegal search
+complaints and \Sexpr{signif(first_amendment_lt5 * 100, 2)}\% for
+first amendment violations.
 
-    
+\paragraph{Recommended visualization: Bar graph} Choose a threshold
+for a `meager' punishment, like 5 days or less, and show the
+percentages of punishments that are meager for each complaint
+type. Showing the distribution of punishments within each complaint is
+confusing, better to just show this one number.
+
+I would not show the data for `administrative' complaints.
+
+\paragraph{Vignette} There were \Sexpr{dbGetQuery(con, "SELECT
+  count(*) FROM accused WHERE complaint = '01B'")} complaints of
+verbal abuse with a bias (racial or otherwise). Only one of these
+complaints was sustained. The punishment was a one day suspension.
+
+\section*{Future Directions}
+With the data that the Invisible Institute currently has, I think
+these are the points that you can make and make compelling. 
+
+With additional data, you may be able to show that 
+
+\begin{enumerate}
+  \item CPD could identify problem officers early
+  \item Lives and millions of dollars of public money are lost because
+    of absence of accountability
+\end{enumerate}
+
+\subsection*{Are problem officer identifiable?}
+Here you can take two approaches one retroactive and one
+prospective. First, you could identify all officers within a relevant
+timespan who have been convicted of pertinent criminal offense. We
+could then build a predictive model using the complaint data that
+distinguishes these officers other officers.
+
+Second, we can identify outlying officers in complaint data now and
+investigate them. If Invisible Institute finds criminal behavior, that
+would be very strong evidence indeed. 
+
 <<load, include=FALSE, eval=FALSE>>=
 library(lme4)
-library(xtable)
 
-
-
+yearly_complaints_for_analysis$unit <- as.factor(yearly_complaints_for_analysis$unit)
+yearly_complaints_for_analysis$officer_id<- as.factor(yearly_complaints_for_analysis$officer_id)
 
 model <- lme4::glmer(complaints ~ (I(year-2013) + 
-                                   + (1 + I(year-2013) | rank)
-                                   + (1 + I(year-2013) | unit)
-                                   + (1 + I(year-2013) | officer_id)
+                                   (1 + I(year-2013) | unit) +
+                                   (1 | officer_id)
                                    ), 
-                     data = yearly_complaints,
+                     data = yearly_complaints_for_analysis,
                      family = "poisson")
-
-police_units <- ranef(model)$unit
-top_police_units <- row.names(police_units)[order(-police_units[,1])][1:10]
-
-
-top_officers_complaints <- dbGetQuery(con,
-                           paste("SELECT * FROM accused ",
-                                 "WHERE officer_id IN (",
-                                 paste(top_officer_ids, collapse=','),
-                                 ") order by officer_id, complaint_id",
-                                 sep=''))
-
-
-                              
 
 @ 
 
-\section*{Cost of Impunity}
-The lack of police accountability costs our city in harm and
-death to our residents, high costs in settlements, and loss of trust
-between police and communities.
-
-This argument has a number of components
-
-\begin{enumerate}
-  \item The IPRA is not catching true cases of police misconduct.
-  \item When the IPRA does sustain misconduct, the consequences are meager
-  \item The Police could catch troubling patterns early
-  \item Harm and treasure could have been avoided if patterns caught early
-\end{enumerate}
-
-\subsection*{IPRA Fails to Detect True Cases of Police Misconduct}
-
-From the CR data, we can see that a tiny fraction of complaints are
-sustained. For the skeptic, it is not clear how to interpret this. It
-could be, as the FOP claims, that nearly all complaints are baseless
-and retaliatory. Without a separate way of judging the validity of
-these complaints, we can't know what the rate of sustaining complains
-should be.
-
-The most convincing sign that a complaint was valid are criminal convictions
-of police officers. If IPRA is only sustaining a fraction of
-complaints for violations that a jury later finds to be a criminal
-offense, that's very strong evidence that IPRA is capable of
-effectively investigating and judging police complaints.
-
-Civil cases can serve as similar evidence. However, since they are
-almost always settled, discrepancies between settlement rates and IPRA's
-sustaining rates are more equivocal. It could be that IPRA is
-sustaining too few cases or that the city is settling too many
-cases. 
-
-\subsection*{Consequences for Misconduct are Meaningless}
-Even when the IPRA sustains a complaint of police misconduct, the
-consequences are meaningless.
-
-I can't think of a better illustration of that than the two cases
-where the IPRA sustained complaints of rape/sexual violence and did
-not fire the officers.
-
-We can also go back to the criminal conviction and settlement data,
-and show the IPRA consequences for officers involved in settlements.
-
-\subsection*{The CPD Could Detect Troubling Officer Early}
-They city claims that complaint reports cannot distinguish between
-criminal police officers and aggressive, but professional
-officers. This is theory that can be tested in to ways.
-
-Retrospectively, once the Invisible Institute secures more historic
-complaint data, we show that officers convicted of crimes have a
-markedly different pattern of complaint reports than other officers.
-
-Prospectively, with the data that we have right now, we can find
-officers who are outliers in the complaints made against them. If we
-investigate these officers and find that these officers are indeed
-engaged in improper behavior, we would have demonstrated that
-complaint data \emph{can} be used to find criminal cops.
-
-Here are the ten officers who are the largest outliers in the past
-four years, controlling for the unit and rank of the
-officer.\footnote{The model is mixed effects Poisson regression model:
+These are the top ten outlying police officers controlling for unit.\footnote{The model is mixed
+  effects Poisson regression model:
   
 \begin{align*}
-&\log{\operatorname{E}(y_{ijkt})} = \pi_{0ijk} + \pi_{1ijk} \cdot \text{Year}_t \\
-&\pi_{0ijk} = \beta_{0000} + \beta_{0i00} + \beta_{00j0} +
-  \beta_{000k} \\
-&\pi_{1ijk} = \beta_{1000} + \beta_{1i00} + \beta_{10j0} +
-  \beta_{100k} \\
-&\beta_{0i00} = b_{0i} \\
-&\beta_{00j0} = c_{0j} \\
-&\beta_{000k} = d_{0k} \\
-&\beta_{1i00} = b_{1i} \\
-&\beta_{10j0} = c_{1j} \\
-&\beta_{100k} = d_{1k}
+\log{\operatorname{E}(y_{ijt})} &= \pi_{0ij} + \pi_{1ij} \cdot \text{Year}_t \\
+\pi_{0ij} &= \beta_{0i} + u_{00j} \\
+\pi_{1ij} &= \beta_{1i} + u_{10j} \\
+\beta_{0i} &= \gamma_{0} + u_{0i} \\
+\beta_{1i} &= \gamma_{1} + u_{1i} \\
 \end{align*}
-
-Where $y_{ijkt}$ is the number of complaints made against officer $i$,
-in unit $j$ with rank $k$ in year $t$.
-
-$u_{0i}$ is the officer specific random effect of the officer on the
-average number of complaints per year. This is what we are ranking the
-officer by. This model controls for the unit and the rank of the officer.
 }
 
 <<top_officers, results='asis'>>=
+library(xtable)
 
 officers <- ranef(model)$officer_id
 
 top_officer_ids <- row.names(officers)[order(-officers[,1])][1:10]
 
 top_officers <- dbGetQuery(con,
-                           paste("SELECT * FROM officers ",
-                                 "WHERE officer_id IN (",
+                           paste("SELECT officer_id, officer_name, star, \
+                                         date_of_appointment, race, \
+                                         current_unit, \
+                                         count(accused.*) as count \
+                                  FROM officers INNER JOIN accused \
+                                  USING (officer_id) \
+                                  WHERE officer_id IN (",
                                  paste(top_officer_ids, collapse=','),
-                                 ")",
+                                 ") \
+                                  GROUP BY officer_id, officer_name, star, \
+                                         date_of_appointment, race, \
+                                         current_unit",
                                  sep=''))
 
+top_officers <- top_officers[match(as.integer(as.character(top_officer_ids)), top_officers$officer_id),]
+
 top_officers$date_of_appointment <- as.character(top_officers$date_of_appointment)
-tab <- xtable::xtable(top_officers[,c(1:4, 6:7)])
-names(tab) <- c("Officer", "Star", "Date of Appointment", "Race", "Rank", "Unit")
+top_officers$count <- as.integer(top_officers$count)
+
+tab <- xtable::xtable(top_officers[,c(2:4, 6:7)])
+names(tab) <- c("Officer", "Star", "Date of Appointment", "Unit",
+                "Complaints")
 
 print(tab, row.names=FALSE, include.rownames=FALSE)
 @ 
 
+\subsection*{Cost of Impunity}
+If it is possible to detect problem officers early and we also had
+data on the lives ended or harmed by police and the settlements paid
+out by the City, we could calculate the costs of impunity. For this we
+would need details on criminal convictions and civil settlements.  
 
-\section*{Data and Miscellaneous Notes}
-In the file
-\url{CPD_Allegations_Complete_Database_-_May_28_2015.xlsx}, there is
-no easy way to know whether data came from the Moore, Bond, or
-Invisible Institute data releases. A \texttt{Source} column should be
-added.
+<<data_problems>>=
+total_complaints <- dbGetQuery(con,
+                               "SELECT COUNT(*) FROM complaints")
 
-The Moore dataset is supposed to have record from 2002-2008, but there
-do not appear to be any records from 2007 or 2008. The records with
-record ids between 19445 and 26786 appear to be the Moore records but have
-dates between 2011 and 2015.
+no_allegations <- dbGetQuery(con,
+                             "SELECT COUNT(*) \
+                              FROM complaints LEFT JOIN accused \
+                              USING (complaint_id) \
+                              WHERE accused.complaint_id IS NULL")
 
-Data is censored. Does not show cops to had no complaints. What can we
-do about that? Relatedly, can we get data on the assignment and ranks
-of officers at the time of the complaint report incidents?
-
-FOP's argument is that affidavit's filter out baseless claims. If that
-was true, then sustained rate should have gone up after the affidavit
-requirement. Did that happen?
+total_allegations <- dbGetQuery(con,
+                                "SELECT COUNT(*) FROM accused")
+missing_complaint_code <- dbGetQuery(con,
+                                     "SELECT COUNT(*) FROM accused \
+                                      WHERE complaint = ''")
 
 
+@ 
 
+\section*{Data Problems}
+There are two very serious potential data problems in recent complaint
+report data. First, there are \Sexpr{no_allegations} complaints that do
+not have any data on the alleged offense: no information about the
+officer, the complaint, the time, nothing. This is about
+\Sexpr{signif(100 * no_allegations/total_complaints, 2)}\% of the complaints.
+
+This is such a large fraction that it makes it impossible to have
+confidence in any conclusions drawn from the data. We must understand
+the reasons for this missingness.
+
+Less serious, there are \Sexpr{missing_complaint_code} allegations that do
+not have a complaint code. This is about \Sexpr{signif(100 *
+  missing_complaint_code/total_allegations, 2)}\%. Why might these be missing?
 
 
 \end{document}
-
-Only a small fraction of the IAD investigations show up in accused file.
-
- Why are so many investigation not have an allegation code?
-
-09A would seem to be a domestic violence report but only 4\% of them are investigated by IPRA, even though it says that all will be investigated by IPRA
-
-John Stahl, a police sargeant, seemed to have investigated a case where there was an allegation of verbal abuse with bias, complaint id: 1063852 This is the only case where this type of allegation was not investigated by an IPRA investigator.
-
-Philip Paluch, a police sargeant, investigated an excessive force complaint 1048571. Elizabeth Ramirez investigated an excessive force complaint 1045498 
-
-Mark Higgs investigated an excessive force complaint 1052098
-
-When do commanding officers versus IPRA staff investigate verbal abuse that is not 1B?
-
-Some b
-
-hernandez neomi
-pamela cureton
-william walsh
-
-
-\begin{enumerate}
-  \item IPRA is failing to sustain true complaints
-  \item The department could identify criminal police officers by
-    looking at their complaint history
-\end{enumerate}
-
-
-Todo: scrape http://www.chicagopolice.org/2013MayDirectives/data/a7a57be2-129add9f-15f12-9add-9fea37e07625ed82.html?ownapi=1
-
-complaints_by_ipra <- dbGetQuery(con, paste("select complaint, ipra from accused inner join (select complaint_id, investigator, case when (investigator in ('", paste(iad_investigators, collapse = "', '"), "') OR investigator in (SELECT officer_name from officers where current_unit = '121') OR investigator IN (SELECT name FROM police_employees WHERE position = 'POLICE AGENT')) then 'IAD' when name is null then 'CPD' when name is not null then 'IPRA' end as ipra from complaints left join ipra_employees on complaints.investigator = ipra_employees.name) as investigators using (complaint_id)", sep=''))
-
-complaints <- dbGetQuery(con, paste("select investigator from complaints where investigator not in ('", paste(iad_investigators, collapse = "', '"), "') AND investigator not in (SELECT officer_name FROM officers) AND investigator NOT IN (SELECT name FROM police_employees WHERE position = 'POLICE AGENT') AND investigator not in (SELECT name from ipra_employees)", sep=''))
-
-
 
