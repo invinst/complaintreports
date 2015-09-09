@@ -520,7 +520,7 @@ Second, we can identify outlying officers in complaint data now and
 investigate them. If Invisible Institute finds criminal behavior, that
 would be very strong evidence indeed. 
 
-<<load, include=FALSE, eval=FALSE>>=
+<<load, include=FALSE>>=
 yearly_complaints_for_analysis$unit <- as.factor(yearly_complaints_for_analysis$unit)
 yearly_complaints_for_analysis$officer_id<- as.factor(yearly_complaints_for_analysis$officer_id)
 
