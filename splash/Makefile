@@ -1,5 +1,5 @@
 all : sustained_by_race.csv complaints_by_race.csv number_complaints.csv \
-	number_complaints_rolled.csv
+	number_complaints_rolled.csv disciplines.csv dispositions.csv
 
 sustained_by_race.csv :
 	psql -d complaints -c " \
@@ -69,4 +69,36 @@ number_complaints.csv :
                                   '04G', '04H', '04J') \
                GROUP BY officer_id) \
          TO STDOUT WITH CSV HEADER" > $@
+
+disciplines.csv :
+	psql -d complaints -c " \
+	COPY (SELECT final_discipline, COUNT(*) \
+              FROM accused \
+              WHERE complaint IN ('01B', '05A', '05B', '05C', \
+                                  '05D', '05F', '05G', '05H', \
+                                  '05J', '05K', '05L', '05M', \
+                                  '05N', '05P', '05Q', '03A', \
+                                  '03B', '03C', '03D', '03E', \
+                                  '03F', '03G', '04A', '04B', \
+                                  '04C', '04D', '04E', '04F', \
+                                  '04G', '04H', '04J') \
+               GROUP BY final_discipline) \
+         TO STDOUT WITH CSV HEADER" > $@
+
+dispositions.csv :
+	psql -d complaints -c " \
+	COPY (SELECT final_finding, COUNT(*) \
+              FROM accused \
+              WHERE complaint IN ('01B', '05A', '05B', '05C', \
+                                  '05D', '05F', '05G', '05H', \
+                                  '05J', '05K', '05L', '05M', \
+                                  '05N', '05P', '05Q', '03A', \
+                                  '03B', '03C', '03D', '03E', \
+                                  '03F', '03G', '04A', '04B', \
+                                  '04C', '04D', '04E', '04F', \
+                                  '04G', '04H', '04J') \
+               GROUP BY final_finding) \
+         TO STDOUT WITH CSV HEADER" > $@
+
+
 
