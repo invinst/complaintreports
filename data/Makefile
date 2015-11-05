@@ -1,6 +1,6 @@
 include config.mk
 
-all : accused.table officers.table complaints.table complaint_types.table ipra_employees.table police_employees.table complainants.table
+all : accused.table officers.table complaints.table ipra_employees.table police_employees.table complainants.table
 
 accused.table : officers.table unnormalized_accused.table
 	psql -d complaints -c "CREATE TABLE accused AS SELECT complaint_id, officer_id, complaint, recommended_finding, recommended_discipline, final_finding, final_discipline FROM unnormalized_accused INNER JOIN officers USING (officer_name, date_of_appointment, star)"
@@ -46,8 +46,8 @@ complaints.csv : 1a.csv 1b.csv 1c.csv 1d.csv 1e.csv 1f.csv 1g.csv 1h.csv
 
 .INTERMEDIATE : ipra_employees.csv
 ipra_employees.csv : Current_Employee_Names__Salaries__and_Position_Titles.csv
-	cat $< | python scripts/ipra.py > $@
+	cat $< | python ../scripts/ipra.py > $@
 
 .table : police_employees.csv
 police_employees.csv : position_span.csv
-	cat $< | python scripts/positions.py > $@
+	cat $< | python ../scripts/positions.py > $@
