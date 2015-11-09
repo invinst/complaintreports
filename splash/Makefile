@@ -38,7 +38,7 @@ sustained_by_race.csv :
 	      FROM (SELECT distinct race, complainant_id \
                     FROM complainants INNER JOIN accused \
                     USING (complaint_id) \
-                    WHERE complaint IN ($(EXTERNAL_CODES)) \
+                    WHERE True \
                     AND final_finding = 'SU') AS _ \
                GROUP BY race) \
          TO STDOUT WITH CSV HEADER" > $@
@@ -49,7 +49,7 @@ complaints_by_race.csv :
 	      FROM (SELECT distinct race, complainant_id \
                     FROM complainants INNER JOIN accused \
                     USING (complaint_id) \
-                    WHERE complaint IN ($(EXTERNAL_CODES)) \
+                    WHERE True \
                     ) AS _ \
                GROUP BY race) \
          TO STDOUT WITH CSV HEADER" > $@
@@ -59,7 +59,7 @@ number_complaints_rolled.csv :
 	COPY (SELECT complaint_count, COUNT(*) \
 	      FROM (SELECT officer_id, COUNT(*) AS complaint_count \
                     FROM accused \
-                    WHERE complaint IN ($(EXTERNAL_CODES)) \
+                    WHERE True \
                     GROUP BY officer_id) AS _ \
                GROUP BY complaint_count \
 	       ORDER BY COUNT(*) DESC) \
@@ -69,7 +69,7 @@ number_complaints.csv :
 	psql -d complaints -c " \
 	COPY (SELECT officer_id, COUNT(*) AS complaint_count \
               FROM accused \
-              WHERE complaint IN ($(EXTERNAL_CODES)) \
+              WHERE True \
                GROUP BY officer_id) \
          TO STDOUT WITH CSV HEADER" > $@
 
@@ -77,7 +77,7 @@ disciplines.csv :
 	psql -d complaints -c " \
 	COPY (SELECT final_discipline, COUNT(*) \
               FROM accused \
-              WHERE complaint IN ($(EXTERNAL_CODES)) \
+              WHERE True \
                GROUP BY final_discipline) \
          TO STDOUT WITH CSV HEADER" > $@
 
@@ -85,7 +85,7 @@ dispositions.csv :
 	psql -d complaints -c " \
 	COPY (SELECT final_finding, COUNT(*) \
               FROM accused \
-              WHERE complaint IN ($(EXTERNAL_CODES)) \
+              WHERE True \
                GROUP BY final_finding) \
          TO STDOUT WITH CSV HEADER" > $@
 
